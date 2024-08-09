@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <opencv2/opencv.hpp>
 #include <QDebug>
+#include <QMetaType>
 #include "src/myclass/MyCamera.h"
 
 
@@ -13,6 +14,12 @@ public:
     Microscope(QWidget* parent = nullptr);
     ~Microscope();
     void initCamera();
+    void initSig();
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+public slots:
+    void receiveFrame();
 
 private:
     Ui_Microscope* ui;

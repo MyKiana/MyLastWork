@@ -1,28 +1,47 @@
 #include "MyCamera.h"
 
 
+ MyCamera::MyCamera(QObject *parent) : QThread(parent) {
+    // 初始化设备
+    InitCamera();
+}
 
-void MyCamera::openCamera(){
+MyCamera::~MyCamera() {
+    // 释放资源
+    avformat_close_input(&pFormatCtx);
+    avcodec_send_packet(codecCtx, NULL); // 向解码器发送空包，以便清空解码器
+    avcodec_receive_frame(codecCtx, pFrame); // 接收解码器中的所有帧 
+    av_packet_free(&pPacket);
+    av_frame_free(&pFrame); 
+    avcodec_free_context(&codecCtx);
+}
 
+
+void MyCamera::InitCamera(){
     // 注册所有文件格式和编解码器  
     avformat_network_init();
 
     avdevice_register_all();
 
-    AVFormatContext *pFormatCtx = NULL;  
-    if (avformat_open_input(&pFormatCtx, "/dev/video0", NULL, NULL) != 0) {  
+    // 分配空间
+    pPacket = av_packet_alloc();  
+    pFrame = av_frame_alloc();  
+
+}
+
+void MyCamera::openCamera(QString cameraName){
+    // 打开摄像头
+    if (avformat_open_input(&pFormatCtx, cameraName.toStdString().c_str(), NULL, NULL) != 0) {  
         // 错误处理  
         qDebug() << "Could not open video device.";
         return ;
     }
-
     if (avformat_find_stream_info(pFormatCtx, NULL) < 0) {  
         qDebug() << "Could not find stream information.";  
         avformat_close_input(&pFormatCtx);  
         return ;  
-    }  
-
-    int videoStreamIndex = -1;  
+    }
+    videoStreamIndex = -1;  
     for (unsigned int i = 0; i < pFormatCtx->nb_streams; i++) {  
         if (pFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {  
             videoStreamIndex = i;  
@@ -33,20 +52,15 @@ void MyCamera::openCamera(){
         qDebug() << "Could not find a video stream.";  
         avformat_close_input(&pFormatCtx);  
         return;  
-    }  
-
-
+    } 
     // 找到视频流的解码器
     AVCodecParameters *codecpar = pFormatCtx->streams[videoStreamIndex]->codecpar;
-    qDebug() << "codec_id : " << codecpar->codec_id;
     const AVCodec *codec = avcodec_find_decoder(codecpar->codec_id);
     if (!codec) {
         qDebug() << "Failed to find codec for video stream.";
         return;
     }
-
-    // 初始化解码器上下文
-    AVCodecContext *codecCtx = avcodec_alloc_context3(codec);
+    codecCtx = avcodec_alloc_context3(codec);
     if (avcodec_parameters_to_context(codecCtx, codecpar) < 0) {
         qDebug() << "Failed to copy codec parameters.";
         return;
@@ -54,8 +68,13 @@ void MyCamera::openCamera(){
     if (avcodec_open2(codecCtx, codec, NULL) < 0) { 
         qDebug() << "Failed to open codec.";
         return;
-    }
-     // 分配一个转换上下文
+    }  
+    isRunning = true;
+    this->start();
+}
+
+void MyCamera::run(){
+    // 分配一个转换上下文
     struct SwsContext *sws_ctx = sws_getContext(
         codecCtx->width,
         codecCtx->height,
@@ -66,68 +85,53 @@ void MyCamera::openCamera(){
         SWS_BILINEAR,
         NULL, NULL, NULL
     );
-    qDebug() << "pix_fmt : " << codecCtx->pix_fmt;
-  
-    // 这里可以进一步设置解码器上下文等，但在这个示例中我们只是读取帧  
-    AVPacket *pPacket = av_packet_alloc();  
-    // if(pPacket == NULL){
-    //     qDebug() << "pPacket is NULL";
-    // }
-    // 
-    AVFrame *pFrame = av_frame_alloc();  
+    while (isRunning)
+    {
+        if(av_read_frame(pFormatCtx, pPacket) >= 0) {  
+            if (pPacket->stream_index == videoStreamIndex) {  
 
-    // 读取帧  
-    //av_read_frame(pFormatCtx, pPacket);
-    while (av_read_frame(pFormatCtx, pPacket) >= 0) {  
-        if (pPacket->stream_index == videoStreamIndex) {  
+                // 将AVPacket数据送入解码器
+                int ret = avcodec_send_packet(codecCtx, pPacket);
+                if (ret < 0) {
+                    qDebug() << "Error sending a packet for decoding.";
+                    return;
+                }
 
-            // 将AVPacket数据送入解码器
-            int ret = avcodec_send_packet(codecCtx, pPacket);
-            if (ret < 0) {
-                qDebug() << "Error sending a packet for decoding.";
-                av_packet_unref(pPacket);
-                return;
-            }
+                ret = avcodec_receive_frame(codecCtx, pFrame);
+                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+                    return;
+                } else if (ret < 0) {
+                    qDebug() << "Error during video decoding.";
+                    return;
+                }
 
-            ret = avcodec_receive_frame(codecCtx, pFrame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                av_frame_free(&pFrame);
-                return;
-            } else if (ret < 0) {
-                qDebug() << "Error during video decoding.";
-                av_frame_free(&pFrame);
-                av_packet_unref(pPacket);
-                return;
-            }
+                // 转换像素格式  
+                int numBytes = av_image_get_buffer_size(AV_PIX_FMT_BGR24, pFrame->width, pFrame->height, 32);  
+                uint8_t *buffer = (uint8_t *)av_malloc(numBytes);  
+                int linesize[1] = {av_image_get_linesize(AV_PIX_FMT_BGR24, pFrame->width, 0)};  
+                sws_scale(sws_ctx, (const uint8_t * const *)pFrame->data, pFrame->linesize, 0, pFrame->height, &buffer, linesize);  
+        
+                // 创建 OpenCV Mat 并保存图片  
+                mat = cv::Mat(pFrame->height, pFrame->width, CV_8UC3, buffer, linesize[0]);
+                //cv::imwrite("frame.jpg", mat);
+                cv::cvtColor(mat, mat, cv::COLOR_BGR2RGB);
+                // 清理
+                av_free(buffer);
 
-            // // 将解码后的帧保存为图片
-            // saveFrameAsImage(frame);
-            // 转换像素格式
-            int numBytes = av_image_get_buffer_size(AV_PIX_FMT_BGR24, pFrame->width, pFrame->height, 1);
-            uint8_t *buffer = (uint8_t *)av_malloc(numBytes * sizeof(uint8_t));
-            sws_scale(
-                sws_ctx,
-                (const uint8_t * const *)pFrame->data,
-                pFrame->linesize,
-                0,
-                pFrame->height,
-                &buffer,
-                pFrame->linesize
-            );
-
-            // 将转换后的帧保存为图片
-            cv::Mat mat(pFrame->height, pFrame->width, CV_8UC3, buffer);
-            qDebug() << pFrame->width << "    :     " << mat.cols;
-            cv::imwrite("frame.jpg", mat);
-
-            // 清理
-            av_free(buffer);
+                emit sigGetFrame();
+            }  
         }  
-    }  
-  
-    // 释放资源  
-    av_frame_free(&pFrame);  
-    av_packet_free(&pPacket);  
-    avformat_close_input(&pFormatCtx);  
+    }
+    if (sws_ctx) {
+        sws_freeContext(sws_ctx);
+    }
 }
 
+void MyCamera::stopCamera() {
+    isRunning = false;
+    this->wait();
+}
+
+cv::Mat MyCamera::getMat(){
+    return mat;
+}

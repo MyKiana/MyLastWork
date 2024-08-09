@@ -5,6 +5,7 @@
 #include <QImage>
 #include <opencv2/opencv.hpp>
 #include <QPixmap>
+#include <QThread>
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -14,13 +15,31 @@ extern "C" {
 #include <libavutil/dict.h> 
 }
 
-class MyCamera{
+class MyCamera : public QThread{
+Q_OBJECT
 public:
-    void openCamera();
+    MyCamera(QObject *parent = nullptr);
+    ~MyCamera();
+    void openCamera(QString cameraName);
+    void InitCamera();
+    void run() override;
+    void stopCamera();
+    cv::Mat getMat();
+
+    signals:
+    void sigGetFrame();
+protected:
+
 private:
+    AVPacket *pPacket = NULL;  
+    AVFrame *pFrame = NULL; 
+    AVFormatContext *pFormatCtx = NULL; 
+    AVCodecContext *codecCtx = NULL;
+    bool isRunning = false;
+    int videoStreamIndex = -1;
 
-
-
+    // opencv 的图像帧
+    cv::Mat mat;
 };
 
 

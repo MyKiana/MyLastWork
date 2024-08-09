@@ -5,7 +5,10 @@
 #include <QImage>
 #include <opencv2/opencv.hpp>
 #include <QPixmap>
+#include <QLabel>
 #include <QThread>
+#include <QImage>
+#include <QMutex>
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -25,9 +28,10 @@ public:
     void run() override;
     void stopCamera();
     cv::Mat getMat();
+    void setLabel(QLabel *la);
 
     signals:
-    void sigGetFrame();
+    void sigGetFrame(cv::Mat fr);
 protected:
 
 private:
@@ -40,6 +44,9 @@ private:
 
     // opencv 的图像帧
     cv::Mat mat;
+    QLabel *test;
+
+    QMutex mutex_;
 };
 
 

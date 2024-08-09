@@ -19,7 +19,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 public slots:
-    void receiveFrame();
+    void receiveFrame(cv::Mat fr);
 
 private:
     Ui_Microscope* ui;

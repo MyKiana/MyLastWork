@@ -3,6 +3,7 @@
 
  MyCamera::MyCamera(QObject *parent) : QThread(parent) {
     // 初始化设备
+    
     InitCamera();
 }
 
@@ -94,15 +95,15 @@ void MyCamera::run(){
                 int ret = avcodec_send_packet(codecCtx, pPacket);
                 if (ret < 0) {
                     qDebug() << "Error sending a packet for decoding.";
-                    return;
+                    continue;
                 }
 
                 ret = avcodec_receive_frame(codecCtx, pFrame);
                 if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-                    return;
+                    continue;
                 } else if (ret < 0) {
                     qDebug() << "Error during video decoding.";
-                    return;
+                    continue;
                 }
 
                 // 转换像素格式  
@@ -110,15 +111,14 @@ void MyCamera::run(){
                 uint8_t *buffer = (uint8_t *)av_malloc(numBytes);  
                 int linesize[1] = {av_image_get_linesize(AV_PIX_FMT_BGR24, pFrame->width, 0)};  
                 sws_scale(sws_ctx, (const uint8_t * const *)pFrame->data, pFrame->linesize, 0, pFrame->height, &buffer, linesize);  
-        
+
                 // 创建 OpenCV Mat 并保存图片  
                 mat = cv::Mat(pFrame->height, pFrame->width, CV_8UC3, buffer, linesize[0]);
                 //cv::imwrite("frame.jpg", mat);
-                cv::cvtColor(mat, mat, cv::COLOR_BGR2RGB);
+
+                emit sigGetFrame(mat);
                 // 清理
                 av_free(buffer);
-
-                emit sigGetFrame();
             }  
         }  
     }
@@ -134,4 +134,8 @@ void MyCamera::stopCamera() {
 
 cv::Mat MyCamera::getMat(){
     return mat;
+}
+
+void MyCamera::setLabel(QLabel *la){
+    test = la;
 }

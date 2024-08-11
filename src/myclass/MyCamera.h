@@ -28,7 +28,6 @@ public:
     void run() override;
     void stopCamera();
     cv::Mat getMat();
-    void setLabel(QLabel *la);
 
     signals:
     void sigGetFrame(cv::Mat fr);
@@ -44,7 +43,6 @@ private:
 
     // opencv 的图像帧
     cv::Mat mat;
-    QLabel *test;
 
     QMutex mutex_;
 };

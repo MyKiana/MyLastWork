@@ -9,12 +9,12 @@
 
 MyCamera::~MyCamera() {
     // 释放资源
-    avformat_close_input(&pFormatCtx);
-    avcodec_send_packet(codecCtx, NULL); // 向解码器发送空包，以便清空解码器
-    avcodec_receive_frame(codecCtx, pFrame); // 接收解码器中的所有帧 
-    av_packet_free(&pPacket);
-    av_frame_free(&pFrame); 
-    avcodec_free_context(&codecCtx);
+    // avformat_close_input(&pFormatCtx);
+    // avcodec_send_packet(codecCtx, NULL); // 向解码器发送空包，以便清空解码器
+    // avcodec_receive_frame(codecCtx, pFrame); // 接收解码器中的所有帧 
+    // av_packet_free(&pPacket);
+    // av_frame_free(&pFrame); 
+    // avcodec_free_context(&codecCtx);
 }
 
 
@@ -88,6 +88,7 @@ void MyCamera::run(){
     );
     while (isRunning)
     {
+        //MyCamera::sleep(1);
         if(av_read_frame(pFormatCtx, pPacket) >= 0) {  
             if (pPacket->stream_index == videoStreamIndex) {  
 
@@ -114,16 +115,13 @@ void MyCamera::run(){
 
                 // 创建 OpenCV Mat 并保存图片  
                 mat = cv::Mat(pFrame->height, pFrame->width, CV_8UC3, buffer, linesize[0]);
-                //cv::imwrite("frame.jpg", mat);
-
-                emit sigGetFrame(mat);
+                cv::imwrite("frame.jpg", mat);
+                //cv::cvtColor(mat, mat, cv::COLOR_BGR2RGB);
+                // emit sigGetFrame(mat);
                 // 清理
                 av_free(buffer);
             }  
         }  
-    }
-    if (sws_ctx) {
-        sws_freeContext(sws_ctx);
     }
 }
 
@@ -134,8 +132,4 @@ void MyCamera::stopCamera() {
 
 cv::Mat MyCamera::getMat(){
     return mat;
-}
-
-void MyCamera::setLabel(QLabel *la){
-    test = la;
 }

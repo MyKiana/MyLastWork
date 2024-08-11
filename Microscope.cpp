@@ -21,7 +21,7 @@ void Microscope::initSig(){
 
 void Microscope::initCamera()
 {
-    myCmaera.openCamera("/dev/video0");
+    myCmaera.openCamera("/dev/video1");
 }
 
 void Microscope::closeEvent(QCloseEvent *event){
@@ -31,9 +31,11 @@ void Microscope::closeEvent(QCloseEvent *event){
 }
 
 void Microscope::receiveFrame(cv::Mat fr){
+    qDebug() << __FUNCTION__;
     frame = std::move(fr);
-    cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
-    QImage img = QImage((const unsigned char*)(frame.data), frame.cols, frame.rows, frame.step,QImage::Format_RGB888);
+    cv::Mat test;
+    cv::cvtColor(frame, test, cv::COLOR_BGR2RGB);
+    QImage img = QImage((const unsigned char*)(test.data), test.cols, test.rows, test.step,QImage::Format_RGB888);
     ui->label->setPixmap(QPixmap::fromImage(img));
     ui->label->resize(ui->label->pixmap()->size());
 }
